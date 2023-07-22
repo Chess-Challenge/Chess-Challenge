@@ -9,7 +9,7 @@ public class MyBot : IChessBot
 
     public Move Think(Board board, Timer timer)
     {
-        var (score, move) = NegaMax(board, 5, timer);
+        var (score, move) = NegaMax(board, int.MinValue, int.MaxValue, 4, timer);
 
 
         //board.MakeMove(move);
@@ -24,12 +24,12 @@ public class MyBot : IChessBot
         return move;
     }
 
-    (int, Move) NegaMax(Board board, int depth, Timer timer)
+    (int, Move) NegaMax(Board board, int alpha, int beta, int depth, Timer timer)
     {
-        if (timer.MillisecondsElapsedThisTurn > 2_000)
-        {
-            return (board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType])), Move.NullMove);
-        }
+        //if (timer.MillisecondsElapsedThisTurn > 2_000)
+        //{
+        //    return (board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType])), Move.NullMove);
+        //}
         if (depth == 0)
         {
             return (board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType])), Move.NullMove);
@@ -53,10 +53,19 @@ public class MyBot : IChessBot
                 continue;
             }
 
-            var negaScore = NegaMax(board, depth - 1, timer).Item1;
+            var negaScore = NegaMax(board, -beta, -alpha, depth - 1, timer).Item1;
             if (-negaScore > max.Item1)
             {
                 max = (-negaScore, move);
+            }
+            if (-negaScore >= beta)
+            {
+                board.UndoMove(move);
+                return (beta, move); //  fail hard beta-cutoff
+            }
+            if (-negaScore > alpha)
+            {
+                alpha = -negaScore; // alpha acts like max in MiniMa
             }
 
             board.UndoMove(move);
@@ -72,4 +81,20 @@ public class MyBot : IChessBot
         }
         return max;
     }
+
+    //int alphaBeta(int alpha, int beta, int depthleft)
+    //{
+    //    if (depthleft == 0)
+    //        return quiesce(alpha, beta);
+
+    //    for (all moves)
+    //    {
+    //        score = -alphaBeta(-beta, -alpha, depthleft - 1);
+    //        if (score >= beta)
+    //            return beta;   //  fail hard beta-cutoff
+    //        if (score > alpha)
+    //            alpha = score; // alpha acts like max in MiniMax
+    //    }
+    //    return alpha;
+    //}
 }
