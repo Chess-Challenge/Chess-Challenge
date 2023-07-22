@@ -1,10 +1,75 @@
 ﻿using ChessChallenge.API;
+using System;
+using System.Linq;
 
 public class MyBot : IChessBot
 {
+    int[] pieceValues = { 0, 100, 300, 300, 500, 900, 100000 };
+    static Random random = new();
+
     public Move Think(Board board, Timer timer)
     {
-        Move[] moves = board.GetLegalMoves();
-        return moves[0];
+        var (score, move) = NegaMax(board, 5, timer);
+
+
+        //board.MakeMove(move);
+
+        //if (board.IsDraw())
+        //{
+        //}
+
+        //board.UndoMove(move);
+
+
+        return move;
+    }
+
+    (int, Move) NegaMax(Board board, int depth, Timer timer)
+    {
+        if (timer.MillisecondsElapsedThisTurn > 2_000)
+        {
+            return (board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType])), Move.NullMove);
+        }
+        if (depth == 0)
+        {
+            return (board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType])), Move.NullMove);
+        }
+
+        var moves = board.GetLegalMoves();
+        var max = (-int.MaxValue, Move.NullMove);
+
+        foreach (var move in moves)
+        {
+            board.MakeMove(move);
+
+            if (board.IsInCheckmate())
+            {
+                board.UndoMove(move);
+                return (int.MaxValue, move);
+            }
+            if (board.IsDraw())
+            {
+                board.UndoMove(move);
+                continue;
+            }
+
+            var negaScore = NegaMax(board, depth - 1, timer).Item1;
+            if (-negaScore > max.Item1)
+            {
+                max = (-negaScore, move);
+            }
+
+            board.UndoMove(move);
+        }
+
+        if (max.Item2.IsNull)
+        {
+            if (moves.Length == 0)
+            {
+                return (0, Move.NullMove);
+            }
+            return (0, moves[random.Next(moves.Length)]);
+        }
+        return max;
     }
 }
