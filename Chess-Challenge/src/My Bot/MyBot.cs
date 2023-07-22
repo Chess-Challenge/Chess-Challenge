@@ -1,5 +1,6 @@
 ﻿using ChessChallenge.API;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 public class MyBot : IChessBot
@@ -7,10 +8,12 @@ public class MyBot : IChessBot
     int[] pieceValues = { 0, 100, 300, 300, 500, 900, 100000 };
     static Random random = new();
 
-    int level = 5;
+    Dictionary<ulong, float> transpositionTable;
+    int level = 4;
 
     public Move Think(Board board, Timer timer)
     {
+        transpositionTable = new Dictionary<ulong, float>();
         return MiniMax(board, level, float.NegativeInfinity, float.PositiveInfinity, true, timer).Item2;
     }
 
@@ -58,7 +61,13 @@ public class MyBot : IChessBot
                     continue;
                 }
 
-                var eval = MiniMax(board, depth - 1, alpha, beta, false, timer).Item1;
+                if (!transpositionTable.TryGetValue(board.ZobristKey, out float eval))
+                {
+                    eval = MiniMax(board, depth - 1, alpha, beta, false, timer).Item1;
+                    transpositionTable.Add(board.ZobristKey, eval);
+                }
+
+
                 if (eval > maxEval)
                 {
                     maxEval = eval;
