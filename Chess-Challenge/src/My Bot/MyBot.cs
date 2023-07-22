@@ -27,11 +27,11 @@ public class MyBot : IChessBot
             {
                 if (random.NextDouble() > 0.5)
                 {
-                    value = +100;
+                    value = +20;
                 }
                 else
                 {
-                    value = -100;
+                    value = -20;
                 }
             }
 
@@ -39,8 +39,8 @@ public class MyBot : IChessBot
         }
 
         var moves = board.GetLegalMoves();
-
         var chosen = Move.NullMove;
+
         if (maximizer)
         {
             var maxEval = float.NegativeInfinity;
