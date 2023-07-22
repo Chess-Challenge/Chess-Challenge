@@ -7,69 +7,130 @@ public class MyBot : IChessBot
     int[] pieceValues = { 0, 100, 300, 300, 500, 900, 100000 };
     static Random random = new();
 
+    int level = 5;
+
     public Move Think(Board board, Timer timer)
     {
-        var (score, move) = NegaMax(board, 5, timer);
-
-
-        //board.MakeMove(move);
-
-        //if (board.IsDraw())
-        //{
-        //}
-
-        //board.UndoMove(move);
-
-
-        return move;
+        return MiniMax(board, level, float.NegativeInfinity, float.PositiveInfinity, true, timer).Item2;
     }
 
-    (int, Move) NegaMax(Board board, int depth, Timer timer)
+    (float, Move) MiniMax(Board board, int depth, float alpha, float beta, bool maximizer, Timer timer)
     {
-        if (timer.MillisecondsElapsedThisTurn > 2_000)
+        if (depth == 0 /*|| timer.MillisecondsElapsedThisTurn > 1_500*/)
         {
-            return (board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType])), Move.NullMove);
-        }
-        if (depth == 0)
-        {
-            return (board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType])), Move.NullMove);
+            float value = board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType]));
+
+            if (value == 0)
+            {
+                if (random.NextDouble() > 0.5)
+                {
+                    value = +100;
+                }
+                else
+                {
+                    value = -100;
+                }
+            }
+
+            return (level % 2 == 0 ? value : -value, Move.NullMove);
         }
 
         var moves = board.GetLegalMoves();
-        var max = (-int.MaxValue, Move.NullMove);
 
-        foreach (var move in moves)
+        var chosen = Move.NullMove;
+        if (maximizer)
         {
-            board.MakeMove(move);
+            var maxEval = float.NegativeInfinity;
 
-            if (board.IsInCheckmate())
+            foreach (var move in moves)
             {
+                board.MakeMove(move);
+
+                if (board.IsInCheckmate())
+                {
+                    board.UndoMove(move);
+                    return (float.PositiveInfinity, move);
+                }
+
+                if (board.IsDraw())
+                {
+                    board.UndoMove(move);
+                    continue;
+                }
+
+                var eval = MiniMax(board, depth - 1, alpha, beta, false, timer).Item1;
+                if (eval > maxEval)
+                {
+                    maxEval = eval;
+                    chosen = move;
+                }
+                alpha = Math.Max(alpha, eval);
+
                 board.UndoMove(move);
-                return (int.MaxValue, move);
-            }
-            if (board.IsDraw())
-            {
-                board.UndoMove(move);
-                continue;
+
+                if (beta <= alpha)
+                {
+                    break;
+                }
             }
 
-            var negaScore = NegaMax(board, depth - 1, timer).Item1;
-            if (-negaScore > max.Item1)
+            if (chosen == Move.NullMove)
             {
-                max = (-negaScore, move);
-            }
+                if (moves.Length == 0)
+                {
+                    return (maxEval, Move.NullMove);
+                }
 
-            board.UndoMove(move);
+                chosen = moves[random.Next(moves.Length)];
+            }
+            return (maxEval, chosen);
         }
-
-        if (max.Item2.IsNull)
+        else
         {
-            if (moves.Length == 0)
+            var minEval = float.PositiveInfinity;
+
+            foreach (var move in moves)
             {
-                return (0, Move.NullMove);
+                board.MakeMove(move);
+
+                if (board.IsInCheckmate())
+                {
+                    board.UndoMove(move);
+                    return (float.PositiveInfinity, move);
+                }
+
+                if (board.IsDraw())
+                {
+                    board.UndoMove(move);
+                    continue;
+                }
+
+                var eval = MiniMax(board, depth - 1, alpha, beta, true, timer).Item1;
+                if (eval < minEval)
+                {
+                    minEval = eval;
+                    chosen = move;
+                }
+                beta = Math.Min(beta, eval);
+
+                board.UndoMove(move);
+
+                if (beta <= alpha)
+                {
+                    break;
+                }
             }
-            return (0, moves[random.Next(moves.Length)]);
+
+            if (chosen == Move.NullMove)
+            {
+                if (moves.Length == 0)
+                {
+                    return (minEval, Move.NullMove);
+                }
+
+                chosen = moves[random.Next(moves.Length)];
+            }
+            return (minEval, chosen);
         }
-        return max;
     }
 }
