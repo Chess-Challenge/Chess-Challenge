@@ -5,37 +5,57 @@ using System.Linq;
 
 public class MyBot : IChessBot
 {
-    int[] pieceValues = { 0, 100, 300, 300, 500, 900, 100000 };
+    int[] pieceValues = { 0, 1, 3, 3, 5, 9, 200 };
     static Random random = new();
 
     Dictionary<ulong, float> transpositionTable;
-    int level = 4;
+    int level;
 
     public Move Think(Board board, Timer timer)
     {
+        level = 6;
+
         transpositionTable = new Dictionary<ulong, float>();
-        return MiniMax(board, level, float.NegativeInfinity, float.PositiveInfinity, true, timer).Item2;
+        var (expectedScore, move) = MiniMax(board, level, float.NegativeInfinity, float.PositiveInfinity, true, board.IsWhiteToMove, timer);
+
+        board.MakeMove(move);
+        var score = MiniMax(board, 0, float.NaN, float.NaN, true, !board.IsWhiteToMove, timer).Item1;
+        board.UndoMove(move);
+
+        Console.WriteLine(
+            $"{(board.IsWhiteToMove ? "White" : "Black")} {move} " +
+            $"-> Score: {(float.IsInfinity(score) ? $"{(float.IsPositiveInfinity(score) ? "+" : "-")}Infinity" : $"{score:.00}")} " +
+            $"(Expected: {(float.IsInfinity(expectedScore) ? $"{(float.IsPositiveInfinity(expectedScore) ? "+" : "-")}Infinity" : $"{expectedScore:.00}")})");
+
+        return move;
     }
 
-    (float, Move) MiniMax(Board board, int depth, float alpha, float beta, bool maximizer, Timer timer)
+    (float, Move) MiniMax(Board board, int depth, float alpha, float beta, bool maximizer, bool isWhite, Timer timer)
     {
         if (depth == 0 /*|| timer.MillisecondsElapsedThisTurn > 1_500*/)
         {
-            float value = board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType]));
+            if (board.IsInCheckmate())
+            {
+                return (float.PositiveInfinity, Move.NullMove);
+            }
+
+            float value = board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == isWhite/*board.IsWhiteToMove*/) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType]));
+            value += (0.1f * board.GetLegalMoves().Length);
+
 
             if (value == 0)
             {
                 if (random.NextDouble() > 0.5)
                 {
-                    value = +20;
+                    value = +0.5f;
                 }
                 else
                 {
-                    value = -20;
+                    value = -0.5f;
                 }
             }
 
-            return (level % 2 == 0 ? value : -value, Move.NullMove);
+            return /*(level % 2 == 0 ? value : -value, Move.NullMove)*/(value, Move.NullMove);
         }
 
         var moves = board.GetLegalMoves();
@@ -52,6 +72,8 @@ public class MyBot : IChessBot
                 if (board.IsInCheckmate())
                 {
                     board.UndoMove(move);
+                    transpositionTable.TryAdd(board.ZobristKey, float.PositiveInfinity);
+
                     return (float.PositiveInfinity, move);
                 }
 
@@ -63,8 +85,9 @@ public class MyBot : IChessBot
 
                 if (!transpositionTable.TryGetValue(board.ZobristKey, out float eval))
                 {
-                    eval = MiniMax(board, depth - 1, alpha, beta, false, timer).Item1;
-                    transpositionTable.Add(board.ZobristKey, eval);
+                    eval = MiniMax(board, depth - 1, alpha, beta, false, isWhite, timer).Item1;
+
+                    transpositionTable.TryAdd(board.ZobristKey, eval);
                 }
 
 
@@ -105,7 +128,9 @@ public class MyBot : IChessBot
                 if (board.IsInCheckmate())
                 {
                     board.UndoMove(move);
-                    return (float.PositiveInfinity, move);
+                    transpositionTable.TryAdd(board.ZobristKey, float.NegativeInfinity);
+
+                    return (float.NegativeInfinity, move);
                 }
 
                 if (board.IsDraw())
@@ -114,7 +139,14 @@ public class MyBot : IChessBot
                     continue;
                 }
 
-                var eval = MiniMax(board, depth - 1, alpha, beta, true, timer).Item1;
+
+                if (!transpositionTable.TryGetValue(board.ZobristKey, out float eval))
+                {
+                    eval = MiniMax(board, depth - 1, alpha, beta, true, isWhite, timer).Item1;
+
+                    transpositionTable.TryAdd(board.ZobristKey, eval);
+                }
+
                 if (eval < minEval)
                 {
                     minEval = eval;
