@@ -58,7 +58,7 @@ public class MyBot : IChessBot
         }
 
         var moves = board.GetLegalMoves();
-        var chosen = Move.NullMove;
+        Move? chosen = null;
 
         var maxEval = float.NegativeInfinity;
 
@@ -100,6 +100,6 @@ public class MyBot : IChessBot
             }
         }
 
-        return (maxEval, chosen);
+        return (maxEval, chosen ?? moves[0]);
     }
 }
