@@ -36,11 +36,6 @@ public class MyBot : IChessBot
 
     (float, Move) NegaMax(Board board, int depth, float alpha, float beta, Timer timer)
     {
-        if (board.IsInCheckmate())
-        {
-            return (99999, Move.NullMove);
-        }
-
         if (depth == 0 /*|| timer.MillisecondsElapsedThisTurn > 1_500*/)
         {
             float value = board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType]));
@@ -70,7 +65,13 @@ public class MyBot : IChessBot
         foreach (var move in moves)
         {
             board.MakeMove(move);
-            
+
+            if (board.IsInCheckmate())
+            {
+                board.UndoMove(move);
+                return (9999, move);
+            }
+
             if (board.IsDraw())
             {
                 board.UndoMove(move);
