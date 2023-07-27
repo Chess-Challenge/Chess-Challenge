@@ -1,32 +1,49 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 public class MyBot : IChessBot
 {
     int[] pieceValues = { 0, 1, 3, 3, 5, 9, 200 };
-    Dictionary<ulong, float> transpositionTable;
+    Dictionary<ulong, Node> transpositionTable;
 
     public Move Think(Board board, Timer timer)
     {
-        transpositionTable = new Dictionary<ulong, float>();
+#if DEBUG
+        transpositionTableUpdated = 0;
+        transpositionTableUsed = 0;
+        totalCounter = 0;
+#endif
 
-        var node = new Node();
+        transpositionTable = new();
+
+        var node = new Node(4);
         node.Eval = this.Search(node, 4, float.NegativeInfinity, float.PositiveInfinity, board);
 
-        var bestSubNode = node.SubNodes.MaxBy(x => x.Eval);
-        return bestSubNode.Moves.Last();
+#if DEBUG
+        Console.WriteLine($"{node.Eval:0.00}");
+
+        Console.WriteLine($"TT-Updated: {100f * transpositionTableUpdated / (float)totalCounter:0.00}%");
+        Console.WriteLine($"TT-Used: {100f * transpositionTableUsed / (float)totalCounter:0.00}%");
+        Console.WriteLine();
+#endif
+
+        return node.SubNodes.MaxBy(x => x.Eval).Moves.Last();
     }
 
-    private float Search(Node node, int depth, float alpha, float beta, Board board)
-    {
-        node.FEN = board.GetFenString();
+#if DEBUG
+    int transpositionTableUpdated;
+    int transpositionTableUsed;
+    int totalCounter;
+#endif
 
-        if (depth == 0)
+    private float Search(Node node, int depthLeft, float alpha, float beta, Board board)
+    {
+        if (depthLeft == 0)
         {
-            var materialValue = board.GetAllPieceLists().Sum(pl => pl.Sum(p => (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType])) /*random.Next(0, +100)*/;
+            var materialValue = board.GetAllPieceLists().Sum(pl => pl.Sum(p =>
+                (p.IsWhite == board.IsWhiteToMove) ? pieceValues[(int)p.PieceType] : -pieceValues[(int)p.PieceType])) /*random.Next(0, +100)*/;
 
             var mobilityValue = 0.1f * board.GetLegalMoves().Length;
             if (board.TrySkipTurn())
@@ -48,34 +65,54 @@ public class MyBot : IChessBot
             var sub_playedMoves = node.Moves.ToList();
             sub_playedMoves.Add(move);
 
-            var sub_node = new Node(moves: sub_playedMoves);
-            node.SubNodes.Add(sub_node);
-
-            if (!transpositionTable.TryGetValue(board.ZobristKey, out float eval))
+            bool found = transpositionTable.TryGetValue(board.ZobristKey, out var sub_node);
+            if (!found)
             {
-                if (board.IsDraw())
+                sub_node = new Node(depthLeft, moves: sub_playedMoves);
+            }
+
+#if DEBUG
+            if (found)
+            {
+                if (depthLeft > sub_node.DepthLeft)
                 {
-                    eval = 0;
-                }
-                else if (board.IsInCheckmate())
-                {
-                    eval = +99999 + depth;
+                    transpositionTableUpdated++;
                 }
                 else
                 {
-                    eval = -this.Search(sub_node, depth - 1, -beta, -alpha, board);
+                    transpositionTableUsed++;
+                }
+            }
+            totalCounter++;
+#endif
+
+            if (!found || depthLeft > sub_node.DepthLeft)
+            {
+                sub_node.DepthLeft = depthLeft;
+                sub_node.Moves = sub_playedMoves;
+
+                if (board.IsDraw())
+                {
+                    sub_node.Eval = 0;
+                }
+                else if (board.IsInCheckmate())
+                {
+                    sub_node.Eval = +99999 + depthLeft;
+                }
+                else
+                {
+                    sub_node.Eval = -this.Search(sub_node, depthLeft - 1, -beta, -alpha, board);
                 }
 
-                transpositionTable.TryAdd(board.ZobristKey, eval);
+                transpositionTable.TryAdd(board.ZobristKey, sub_node);
             }
+            node.SubNodes.Add(sub_node);
 
-            sub_node.Eval = eval;
-
-            if (eval > max)
+            if (sub_node.Eval > max)
             {
-                max = eval;
+                max = sub_node.Eval;
             }
-            alpha = Math.Max(eval, alpha);
+            alpha = Math.Max(sub_node.Eval, alpha);
 
             board.UndoMove(move);
 
@@ -92,16 +129,19 @@ public class MyBot : IChessBot
 
     class Node
     {
-        public List<Move> Moves { get; set; }
         public float Eval { get; set; }
-        public List<Node> SubNodes { get; set; }
-        public string? FEN { get; set; } = null;
+        public int DepthLeft { get; set; }
 
-        public Node(List<Move>? moves = null, float? eval = null, List<Node>? subNodes = null)
+        public List<Move> Moves { get; set; }
+        public List<Node> SubNodes { get; set; }
+
+        public Node(int depthLeft, float? eval = null, List<Move>? moves = null, List<Node>? subNodes = null)
         {
+            this.DepthLeft = depthLeft;
+            this.Eval = eval ?? float.NaN;
+
             this.Moves = moves ?? new List<Move>();
             this.SubNodes = subNodes ?? new List<Node>();
-            this.Eval = eval ?? float.NaN;
         }
     }
 }
